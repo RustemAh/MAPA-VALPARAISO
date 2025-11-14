@@ -1,0 +1,441 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Ganador presidencial por comuna — Región de Valparaíso</title>
+
+<!-- Leaflet CSS -->
+<link
+  rel="stylesheet"
+  href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+  integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY="
+  crossorigin=""
+/>
+
+<style>
+:root { color-scheme: light; }
+* { box-sizing:border-box; }
+
+body {
+  margin:0;
+  font-family:Inter,system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif;
+  background:#f3f4f6;
+  color:#111827;
+}
+
+.wrap {
+  max-width:1080px;
+  margin:0 auto;
+  padding:16px;
+}
+
+/* Header */
+.header {
+  display:flex;
+  flex-wrap:wrap;
+  justify-content:space-between;
+  gap:8px;
+  align-items:flex-end;
+  margin-bottom:12px;
+}
+.header-main {
+  display:flex;
+  flex-direction:column;
+  gap:4px;
+}
+.header-title {
+  margin:0;
+  font-size:22px;
+  font-weight:900;
+}
+.header-sub {
+  margin:0;
+  font-size:12px;
+  color:#6b7280;
+}
+.badge-main {
+  background:#FFD400;
+  padding:4px 10px;
+  border-radius:999px;
+  font-size:11px;
+  font-weight:900;
+  text-transform:uppercase;
+}
+
+/* Layout */
+.layout {
+  display:grid;
+  grid-template-columns:minmax(0,3fr) minmax(260px,1.2fr);
+  gap:16px;
+}
+@media (max-width:840px) {
+  .layout { grid-template-columns:1fr; }
+}
+
+/* Map card */
+.map-card {
+  background:#fff;
+  border-radius:14px;
+  border:1px solid #e5e7eb;
+  box-shadow:0 1px 3px rgba(15,23,42,.08);
+  padding:14px 16px 12px;
+}
+.map-card h2 {
+  margin:0 0 4px;
+  font-size:16px;
+  font-weight:800;
+}
+.map-sub {
+  margin:0 0 10px;
+  font-size:12px;
+  color:#6b7280;
+}
+
+#map {
+  width:100%;
+  height:520px;
+  border-radius:12px;
+  overflow:hidden;
+}
+
+/* Legend */
+.legend {
+  margin-top:8px;
+  display:flex;
+  flex-wrap:wrap;
+  gap:10px;
+  font-size:11px;
+}
+.legend-item {
+  display:inline-flex;
+  align-items:center;
+  gap:6px;
+}
+.legend-swatch {
+  width:14px;
+  height:14px;
+  border-radius:4px;
+  border:1px solid rgba(15,23,42,.2);
+}
+
+/* Side panel */
+.side {
+  background:#fff;
+  border-radius:14px;
+  border:1px solid #e5e7eb;
+  box-shadow:0 1px 3px rgba(15,23,42,.08);
+  padding:14px 16px 10px;
+  display:flex;
+  flex-direction:column;
+  gap:10px;
+}
+.side h3 {
+  margin:0;
+  font-size:15px;
+  font-weight:800;
+}
+.side-sub {
+  font-size:11px;
+  color:#6b7280;
+}
+
+/* Candidatos */
+.cand-list {
+  margin:6px 0 4px;
+  padding:0;
+  list-style:none;
+  display:flex;
+  flex-direction:column;
+  gap:6px;
+}
+.cand-item {
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:6px;
+  font-size:12px;
+}
+.cand-main {
+  display:flex;
+  align-items:center;
+  gap:6px;
+}
+.cand-dot {
+  width:10px;
+  height:10px;
+  border-radius:50%;
+}
+.cand-name { font-weight:700; }
+.cand-party { color:#6b7280; font-size:11px; }
+.cand-perc { font-weight:700; }
+
+/* Commune info */
+.comuna-info {
+  margin-top:6px;
+  padding-top:6px;
+  border-top:1px solid #e5e7eb;
+  font-size:12px;
+}
+.comuna-name {
+  font-weight:800;
+  margin-bottom:2px;
+}
+.comuna-line { color:#4b5563; }
+
+/* Footer */
+.footer {
+  margin-top:10px;
+  font-size:11px;
+  color:#6b7280;
+  display:flex;
+  justify-content:space-between;
+  gap:8px;
+  flex-wrap:wrap;
+}
+
+/* Leaflet tooltip NBC style */
+.leaflet-tooltip {
+  background:#111827;
+  color:#f9fafb;
+  border:none;
+  border-radius:6px;
+  box-shadow:0 4px 10px rgba(15,23,42,.35);
+  padding:6px 8px;
+  font-size:11px;
+}
+.leaflet-tooltip-top:before {
+  border-top-color:#111827;
+}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header class="header">
+    <div class="header-main">
+      <h1 class="header-title">Ganador presidencial por comuna — Región de Valparaíso</h1>
+      <p class="header-sub">Mapa estilo NBC · cada comuna coloreada según el candidato ganador (lo defines en el código).</p>
+    </div>
+    <div class="badge-main">Mapa interactivo · NBC/Epicentro</div>
+  </header>
+
+  <section class="layout">
+    <article class="map-card">
+      <h2>Mapa comunal</h2>
+      <p class="map-sub">Pasa el mouse o toca una comuna para ver quién gana en esa zona.</p>
+      <div id="map"></div>
+
+      <div class="legend">
+        <div class="legend-item">
+          <span class="legend-swatch" style="background:#005CA9;"></span>
+          <span>Bloque centroizquierda</span>
+        </div>
+        <div class="legend-item">
+          <span class="legend-swatch" style="background:#E5252A;"></span>
+          <span>Bloque derecha</span>
+        </div>
+        <div class="legend-item">
+          <span class="legend-swatch" style="background:#F59E0B;"></span>
+          <span>Terceros / independientes</span>
+        </div>
+        <div class="legend-item">
+          <span class="legend-swatch" style="background:#6b7280;"></span>
+          <span>Sin datos / empate</span>
+        </div>
+      </div>
+    </article>
+
+    <aside class="side">
+      <div>
+        <h3>Candidatos presidenciales (ejemplo)</h3>
+        <p class="side-sub">Puedes ajustar nombres, partidos y colores según la elección real.</p>
+      </div>
+
+      <ul class="cand-list" id="candList"></ul>
+
+      <div class="comuna-info" id="comunaInfo">
+        <div class="comuna-name">Seleccione una comuna</div>
+        <div class="comuna-line">
+          Pasa el cursor por el mapa para ver el candidato ganador en cada comuna.
+        </div>
+      </div>
+    </aside>
+  </section>
+
+  <footer class="footer">
+    <div>Epicentro Labs · Mapa NBC Valparaíso</div>
+    <div id="timestamp">—</div>
+  </footer>
+</div>
+
+<!-- Leaflet JS -->
+<script
+  src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
+  integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo="
+  crossorigin=""
+></script>
+
+<script>
+// =====================
+// CONFIGURACIÓN BASE
+// =====================
+
+// Candidatos demo con colores estilo NBC / Epicentro
+const candidates = {
+  // Ajusta estos códigos, nombres y partidos como quieras
+  "KAST":     { name:"José Antonio Kast",  party:"Derecha",         color:"#E5252A" },
+  "MATTHEI":  { name:"Evelyn Matthei",     party:"Derecha",         color:"#E5252A" },
+  "JARA":     { name:"Jeannette Jara",     party:"Centroizquierda", color:"#005CA9" },
+  "PARISI":   { name:"Franco Parisi",      party:"Terceros",        color:"#F59E0B" }
+};
+
+// Ganador por comuna (AQUÍ ES DONDE TÚ COMPLETAS LOS DATOS REALES)
+const winners = {
+  // EJEMPLOS (puedes borrarlos y rellenar tú):
+  "Valparaíso":   { code:"JARA",    pct:52.3, votes:82000 },
+  "Viña del Mar": { code:"MATTHEI", pct:51.0, votes:96000 },
+  "Quilpué":      { code:"JARA",    pct:49.2, votes:53000 },
+  "Villa Alemana":{ code:"JARA",    pct:50.8, votes:41000 }
+
+  // Luego agregas:
+  // "Comuna": { code:"KAST" | "MATTHEI" | "JARA" | "PARISI", pct:XX.X, votes:NNNNN }
+  // Ejemplo:
+  // "Quillota": { code:"PARISI", pct:33.4, votes:20000 },
+};
+
+// =====================
+// PANEL LATERAL
+// =====================
+function renderCandidateList() {
+  const ul = document.getElementById("candList");
+  ul.innerHTML = "";
+  Object.values(candidates).forEach(c => {
+    const li = document.createElement("li");
+    li.className = "cand-item";
+    li.innerHTML = `
+      <div class="cand-main">
+        <span class="cand-dot" style="background:${c.color};"></span>
+        <div>
+          <div class="cand-name">${c.name}</div>
+          <div class="cand-party">${c.party}</div>
+        </div>
+      </div>
+      <div class="cand-perc">—</div>
+    `;
+    ul.appendChild(li);
+  });
+}
+
+function updateComunaInfo(name, data) {
+  const box = document.getElementById("comunaInfo");
+  if (!name) {
+    box.innerHTML = `
+      <div class="comuna-name">Seleccione una comuna</div>
+      <div class="comuna-line">
+        Pasa el cursor por el mapa para ver el candidato ganador en cada comuna.
+      </div>
+    `;
+    return;
+  }
+  const w = data || {};
+  const cand = candidates[w.code] || null;
+  const pct = w.pct ? w.pct.toFixed(1).replace(".",",") : null;
+  const votes = w.votes ? w.votes.toLocaleString("es-CL") : null;
+
+  box.innerHTML = `
+    <div class="comuna-name">${name}</div>
+    <div class="comuna-line">
+      ${cand ? `<b>${cand.name}</b> (${cand.party})` : "Sin ganador definido"}<br>
+      ${
+        pct && votes ? `${pct}% · ${votes} votos (demo)` :
+        pct ? `${pct}% (demo)` :
+        "Sin datos porcentuales (demo)"
+      }
+    </div>
+  `;
+}
+
+// =====================
+// MAPA
+// =====================
+const map = L.map("map", {
+  zoomControl: true,
+  attributionControl: false
+});
+
+// Fondo neutro, sin tiles
+L.tileLayer('', { attribution:'' }).addTo(map);
+
+// Estilo por comuna
+function styleFeature(feature) {
+  const name = feature.properties.comuna || feature.properties.Comuna;
+  const info = winners[name] || null;
+  let fill = "#6b7280"; // gris por defecto
+
+  if (info && candidates[info.code]) {
+    fill = candidates[info.code].color;
+  }
+
+  return {
+    color: "#ffffff",
+    weight: 1.5,
+    fillColor: fill,
+    fillOpacity: 0.9
+  };
+}
+
+let geojsonLayer;
+
+function onEachFeature(feature, layer) {
+  const name = feature.properties.comuna || feature.properties.Comuna;
+  const info = winners[name] || null;
+  const cand = info && candidates[info.code] ? candidates[info.code] : null;
+  const pct = info && info.pct ? info.pct.toFixed(1).replace(".",",") : null;
+
+  let tooltipHtml = `<strong>${name}</strong><br>`;
+  if (cand) {
+    tooltipHtml += `${cand.name}`;
+    if (pct) tooltipHtml += ` — ${pct}%`;
+  } else {
+    tooltipHtml += `Sin datos (demo)`;
+  }
+
+  layer.bindTooltip(tooltipHtml, { sticky:true, direction:"top" });
+
+  layer.on({
+    click: () => {
+      updateComunaInfo(name, info);
+    },
+    mouseover: (e) => {
+      e.target.setStyle({ weight:2.5 });
+    },
+    mouseout: (e) => {
+      geojsonLayer.resetStyle(e.target);
+    }
+  });
+}
+
+fetch("valparaiso_comunas.geojson")
+  .then(r => r.json())
+  .then(data => {
+    geojsonLayer = L.geoJSON(data, {
+      style: styleFeature,
+      onEachFeature
+    }).addTo(map);
+    map.fitBounds(geojsonLayer.getBounds(), { padding:[10,10] });
+  })
+  .catch(err => {
+    console.error("Error cargando GeoJSON:", err);
+  });
+
+// Init UI
+renderCandidateList();
+updateComunaInfo(null,null);
+document.getElementById("timestamp").textContent =
+  "Actualizado: " + new Date().toLocaleString("es-CL", {
+    dateStyle:"medium",
+    timeStyle:"short"
+  });
+</script>
+</body>
+</html>
