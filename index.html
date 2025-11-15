@@ -5,7 +5,6 @@
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <title>Ganador presidencial por comuna — Región de Valparaíso</title>
 
-<!-- Leaflet CSS -->
 <link
   rel="stylesheet"
   href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
@@ -214,7 +213,9 @@ body {
   <header class="header">
     <div class="header-main">
       <h1 class="header-title">Ganador presidencial por comuna — Región de Valparaíso</h1>
-      <p class="header-sub">Mapa estilo NBC · cada comuna coloreada según el candidato ganador (lo defines en el código).</p>
+      <p class="header-sub">
+        Mapa estilo NBC · datos cargados desde Google Sheets (votos por comuna, ganador calculado automáticamente).
+      </p>
     </div>
     <div class="badge-main">Mapa interactivo · NBC/Epicentro</div>
   </header>
@@ -222,7 +223,7 @@ body {
   <section class="layout">
     <article class="map-card">
       <h2>Mapa comunal</h2>
-      <p class="map-sub">Pasa el mouse o toca una comuna para ver quién gana en esa zona.</p>
+      <p class="map-sub">Pasa el mouse o toca una comuna para ver quién gana en esa zona, según los votos cargados.</p>
       <div id="map"></div>
 
       <div class="legend">
@@ -247,8 +248,8 @@ body {
 
     <aside class="side">
       <div>
-        <h3>Candidatos presidenciales (ejemplo)</h3>
-        <p class="side-sub">Puedes ajustar nombres, partidos y colores según la elección real.</p>
+        <h3>Candidatos presidenciales (definidos en el código)</h3>
+        <p class="side-sub">Se usan para colorear el mapa y mostrar info por comuna.</p>
       </div>
 
       <ul class="cand-list" id="candList"></ul>
@@ -268,7 +269,6 @@ body {
   </footer>
 </div>
 
-<!-- Leaflet JS -->
 <script
   src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
   integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo="
@@ -280,28 +280,77 @@ body {
 // CONFIGURACIÓN BASE
 // =====================
 
-// Candidatos demo con colores estilo NBC / Epicentro
-const candidates = {
-  // Ajusta estos códigos, nombres y partidos como quieras
-  "KAST":     { name:"José Antonio Kast",  party:"Derecha",         color:"#E5252A" },
-  "MATTHEI":  { name:"Evelyn Matthei",     party:"Derecha",         color:"#E5252A" },
-  "JARA":     { name:"Jeannette Jara",     party:"Centroizquierda", color:"#005CA9" },
-  "PARISI":   { name:"Franco Parisi",      party:"Terceros",        color:"#F59E0B" }
+// URL CSV de tu Google Sheets (gid=0)
+const SHEET_CSV_URL =
+  "https://docs.google.com/spreadsheets/d/1MxCd4GCNJ8bAmf8Fa4LlpOLsvkxAxJt2av6gLT4acRs/export?format=csv&gid=0";
+
+// Mapa de candidatos: clave = NOMBRE DE COLUMNA EXACTO en tu Sheet
+const candidateMeta = {
+  "Franco Parisi": {
+    short: "Parisi",
+    bloc: "Terceros",
+    color: "#F59E0B"
+  },
+  "Jeanete Jara": {
+    short: "Jara",
+    bloc: "Centroizquierda",
+    color: "#005CA9"
+  },
+  "Marco Enríquez Ominami": {
+    short: "M. Enríquez-O.",
+    bloc: "Centroizquierda",
+    color: "#0EA5E9"
+  },
+  "Johannes Kaiser": {
+    short: "Kaiser",
+    bloc: "Derecha",
+    color: "#111827"
+  },
+  "José Antonio Kast": {
+    short: "Kast",
+    bloc: "Derecha",
+    color: "#E5252A"
+  },
+  "Eduardo Artes": {
+    short: "Artés",
+    bloc: "Izquierda",
+    color: "#A21CAF"
+  },
+  "Evelyn Matthei": {
+    short: "Matthei",
+    bloc: "Derecha",
+    color: "#B91C1C"
+  },
+  "Harold Mayne-Nicholls": {
+    short: "Mayne-N.",
+    bloc: "Independiente",
+    color: "#22C55E"
+  }
 };
 
-// Ganador por comuna (AQUÍ ES DONDE TÚ COMPLETAS LOS DATOS REALES)
-const winners = {
-  // EJEMPLOS (puedes borrarlos y rellenar tú):
-  "Valparaíso":   { code:"JARA",    pct:52.3, votes:82000 },
-  "Viña del Mar": { code:"MATTHEI", pct:51.0, votes:96000 },
-  "Quilpué":      { code:"JARA",    pct:49.2, votes:53000 },
-  "Villa Alemana":{ code:"JARA",    pct:50.8, votes:41000 }
+// =====================
+// HELPERS
+// =====================
+function toIntVotes(v) {
+  if (v == null) return 0;
+  const n = parseInt(String(v).replace(/[^\d-]/g, ""), 10);
+  return isNaN(n) ? 0 : n;
+}
 
-  // Luego agregas:
-  // "Comuna": { code:"KAST" | "MATTHEI" | "JARA" | "PARISI", pct:XX.X, votes:NNNNN }
-  // Ejemplo:
-  // "Quillota": { code:"PARISI", pct:33.4, votes:20000 },
-};
+function parseCSV(text) {
+  const lines = text.split(/\r?\n/).filter(l => l.trim() !== "");
+  if (!lines.length) return { headers: [], rows: [] };
+  const headers = lines[0].split(",").map(h => h.trim());
+  const rows = lines.slice(1).map(line => {
+    const cols = line.split(",");
+    const obj = {};
+    headers.forEach((h, i) => {
+      obj[h] = (cols[i] || "").trim();
+    });
+    return obj;
+  });
+  return { headers, rows };
+}
 
 // =====================
 // PANEL LATERAL
@@ -309,15 +358,15 @@ const winners = {
 function renderCandidateList() {
   const ul = document.getElementById("candList");
   ul.innerHTML = "";
-  Object.values(candidates).forEach(c => {
+  Object.entries(candidateMeta).forEach(([fullName, meta]) => {
     const li = document.createElement("li");
     li.className = "cand-item";
     li.innerHTML = `
       <div class="cand-main">
-        <span class="cand-dot" style="background:${c.color};"></span>
+        <span class="cand-dot" style="background:${meta.color};"></span>
         <div>
-          <div class="cand-name">${c.name}</div>
-          <div class="cand-party">${c.party}</div>
+          <div class="cand-name">${fullName}</div>
+          <div class="cand-party">${meta.bloc}</div>
         </div>
       </div>
       <div class="cand-perc">—</div>
@@ -326,7 +375,7 @@ function renderCandidateList() {
   });
 }
 
-function updateComunaInfo(name, data) {
+function updateComunaInfo(name, data, row) {
   const box = document.getElementById("comunaInfo");
   if (!name) {
     box.innerHTML = `
@@ -338,42 +387,51 @@ function updateComunaInfo(name, data) {
     return;
   }
   const w = data || {};
-  const cand = candidates[w.code] || null;
-  const pct = w.pct ? w.pct.toFixed(1).replace(".",",") : null;
+  const meta = w.winnerName ? candidateMeta[w.winnerName] : null;
+  const pct = w.pct ? w.pct.toFixed(1).replace(".", ",") : null;
   const votes = w.votes ? w.votes.toLocaleString("es-CL") : null;
+  const nulo = row && row["Voto nulo / blanco"] ? toIntVotes(row["Voto nulo / blanco"]).toLocaleString("es-CL") : null;
+  const total = row && row["Total"] ? toIntVotes(row["Total"]).toLocaleString("es-CL") : null;
 
   box.innerHTML = `
     <div class="comuna-name">${name}</div>
     <div class="comuna-line">
-      ${cand ? `<b>${cand.name}</b> (${cand.party})` : "Sin ganador definido"}<br>
+      ${meta ? `<b>${meta.short}</b> (${w.winnerName}, ${meta.bloc})` : "Sin ganador definido"}<br>
       ${
-        pct && votes ? `${pct}% · ${votes} votos (demo)` :
-        pct ? `${pct}% (demo)` :
-        "Sin datos porcentuales (demo)"
-      }
+        pct && votes
+          ? `${pct}% · ${votes} votos`
+          : votes
+          ? `${votes} votos`
+          : "Sin datos de votos"
+      }<br>
+      ${nulo ? `Nulo/blanco: ${nulo} votos` : ""}<br>
+      ${total ? `Total: ${total} votos` : ""}
     </div>
   `;
 }
 
 // =====================
-// MAPA
+// MAPA LEAFLET
 // =====================
 const map = L.map("map", {
   zoomControl: true,
   attributionControl: false
 });
 
-// Fondo neutro, sin tiles
 L.tileLayer('', { attribution:'' }).addTo(map);
+
+let geojsonLayer;
+let winnersByComuna = {};   // { "Valparaíso": { winnerName, votes, pct }, ... }
+let sheetRowByComuna = {};  // { "Valparaíso": rowObject }
 
 // Estilo por comuna
 function styleFeature(feature) {
-  const name = feature.properties.comuna || feature.properties.Comuna;
-  const info = winners[name] || null;
+  const name = feature.properties.comuna || feature.properties.Comuna || "";
+  const info = winnersByComuna[name] || null;
   let fill = "#6b7280"; // gris por defecto
 
-  if (info && candidates[info.code]) {
-    fill = candidates[info.code].color;
+  if (info && info.winnerName && candidateMeta[info.winnerName]) {
+    fill = candidateMeta[info.winnerName].color;
   }
 
   return {
@@ -384,17 +442,15 @@ function styleFeature(feature) {
   };
 }
 
-let geojsonLayer;
-
 function onEachFeature(feature, layer) {
-  const name = feature.properties.comuna || feature.properties.Comuna;
-  const info = winners[name] || null;
-  const cand = info && candidates[info.code] ? candidates[info.code] : null;
-  const pct = info && info.pct ? info.pct.toFixed(1).replace(".",",") : null;
+  const name = feature.properties.comuna || feature.properties.Comuna || "";
+  const info = winnersByComuna[name] || null;
+  const meta = info && info.winnerName ? candidateMeta[info.winnerName] : null;
+  const pct = info && info.pct ? info.pct.toFixed(1).replace(".", ",") : null;
 
   let tooltipHtml = `<strong>${name}</strong><br>`;
-  if (cand) {
-    tooltipHtml += `${cand.name}`;
+  if (meta) {
+    tooltipHtml += `${info.winnerName}`;
     if (pct) tooltipHtml += ` — ${pct}%`;
   } else {
     tooltipHtml += `Sin datos (demo)`;
@@ -404,7 +460,7 @@ function onEachFeature(feature, layer) {
 
   layer.on({
     click: () => {
-      updateComunaInfo(name, info);
+      updateComunaInfo(name, info, sheetRowByComuna[name]);
     },
     mouseover: (e) => {
       e.target.setStyle({ weight:2.5 });
@@ -415,27 +471,79 @@ function onEachFeature(feature, layer) {
   });
 }
 
-fetch("valparaiso_comunas.geojson")
-  .then(r => r.json())
-  .then(data => {
+// =====================
+// CARGA DE GOOGLE SHEETS + GEOJSON
+// =====================
+async function loadSheet() {
+  const res = await fetch(SHEET_CSV_URL + "&t=" + Date.now(), { cache:"no-store" });
+  const text = await res.text();
+  const { headers, rows } = parseCSV(text);
+
+  const candidateColumns = headers.filter(h =>
+    h !== "Comuna" && h !== "Voto nulo / blanco" && h !== "Total"
+  );
+
+  winnersByComuna = {};
+  sheetRowByComuna = {};
+
+  rows.forEach(row => {
+    const comunaName = (row["Comuna"] || "").trim();
+    if (!comunaName) return;
+
+    let bestName = null;
+    let bestVotes = -1;
+    const totalVotes = toIntVotes(row["Total"]);
+
+    candidateColumns.forEach(col => {
+      const votes = toIntVotes(row[col]);
+      if (votes > bestVotes) {
+        bestVotes = votes;
+        bestName = col;
+      }
+    });
+
+    const pct = totalVotes > 0 && bestVotes >= 0
+      ? (bestVotes * 100) / totalVotes
+      : null;
+
+    winnersByComuna[comunaName] = {
+      winnerName: bestName,
+      votes: bestVotes >= 0 ? bestVotes : null,
+      pct: pct
+    };
+
+    sheetRowByComuna[comunaName] = row;
+  });
+}
+
+async function init() {
+  try {
+    await loadSheet();
+
+    const res = await fetch("valparaiso_only.geojson");
+    const data = await res.json();
+
     geojsonLayer = L.geoJSON(data, {
       style: styleFeature,
       onEachFeature
     }).addTo(map);
-    map.fitBounds(geojsonLayer.getBounds(), { padding:[10,10] });
-  })
-  .catch(err => {
-    console.error("Error cargando GeoJSON:", err);
-  });
 
-// Init UI
-renderCandidateList();
-updateComunaInfo(null,null);
-document.getElementById("timestamp").textContent =
-  "Actualizado: " + new Date().toLocaleString("es-CL", {
-    dateStyle:"medium",
-    timeStyle:"short"
-  });
+    map.fitBounds(geojsonLayer.getBounds(), { padding:[10,10] });
+  } catch (err) {
+    console.error("Error cargando datos:", err);
+  }
+
+  renderCandidateList();
+  updateComunaInfo(null, null, null);
+  document.getElementById("timestamp").textContent =
+    "Actualizado: " + new Date().toLocaleString("es-CL", {
+      dateStyle:"medium",
+      timeStyle:"short"
+    });
+}
+
+init();
 </script>
 </body>
 </html>
+
